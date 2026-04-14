@@ -71,9 +71,12 @@ describe("wrapCopilotAnthropicStream", () => {
     ]);
   });
 
-  it("leaves non-Anthropic Copilot models untouched", () => {
+  it("adds Copilot IDE headers to OpenAI-style Copilot models", () => {
     const baseStreamFn = vi.fn(() => ({ async *[Symbol.asyncIterator]() {} }) as never);
     const wrapped = wrapCopilotAnthropicStream(baseStreamFn);
+    const messages = [{ role: "user", content: "hi" }] as Parameters<
+      typeof buildCopilotDynamicHeaders
+    >[0]["messages"];
     const options = { headers: { Existing: "1" } };
 
     void wrapped(
@@ -82,11 +85,23 @@ describe("wrapCopilotAnthropicStream", () => {
         api: "openai-responses",
         id: "gpt-4.1",
       } as never,
-      { messages: [{ role: "user", content: "hi" }] } as never,
+      { messages } as never,
       options as never,
     );
 
-    expect(baseStreamFn).toHaveBeenCalledWith(expect.anything(), expect.anything(), options);
+    expect(baseStreamFn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        headers: {
+          ...buildCopilotDynamicHeaders({
+            messages,
+            hasImages: false,
+          }),
+          Existing: "1",
+        },
+      }),
+    );
   });
 
   it("adapts provider stream context without changing wrapper behavior", () => {

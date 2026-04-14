@@ -6,31 +6,35 @@ import {
   buildCopilotDynamicHeaders,
   hasCopilotVisionInput,
   streamWithPayloadPatch,
-} from "openclaw/plugin-sdk/provider-stream-shared";
-
-type _StreamContext = Parameters<StreamFn>[1];
+} from "openclaw/plugin-sdk/provider-stream";
 
 export function wrapCopilotAnthropicStream(baseStreamFn: StreamFn | undefined): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
-    if (model.provider !== "github-copilot" || model.api !== "anthropic-messages") {
+    if (model.provider !== "github-copilot") {
       return underlying(model, context, options);
+    }
+
+    const nextOptions = {
+      ...options,
+      headers: {
+        ...buildCopilotDynamicHeaders({
+          messages: context.messages,
+          hasImages: hasCopilotVisionInput(context.messages),
+        }),
+        ...options?.headers,
+      },
+    };
+
+    if (model.api !== "anthropic-messages") {
+      return underlying(model, context, nextOptions);
     }
 
     return streamWithPayloadPatch(
       underlying,
       model,
       context,
-      {
-        ...options,
-        headers: {
-          ...buildCopilotDynamicHeaders({
-            messages: context.messages,
-            hasImages: hasCopilotVisionInput(context.messages),
-          }),
-          ...options?.headers,
-        },
-      },
+      nextOptions,
       applyAnthropicEphemeralCacheControlMarkers,
     );
   };
